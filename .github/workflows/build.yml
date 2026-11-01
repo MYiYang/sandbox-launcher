@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: 还原
+        run: dotnet restore SandboxLauncher.sln
+
+      - name: 构建全部项目
+        run: dotnet build SandboxLauncher.sln -c Release --no-restore
+
+      - name: 构建测试客户端
+        run: dotnet build tools/TestClient/TestClient.csproj -c Release
+
+      - name: 端到端测试
+        run: dotnet run --project tests/SandboxLauncher.Tests -c Release
+
+      - name: 免安装包（self-contained win-x64）
+        run: |
+          dotnet publish src/SandboxLauncher.App -c Release -r win-x64 --self-contained true -o out/SandboxLauncher
+          dotnet publish src/SandboxLauncher.Cli -c Release -r win-x64 --self-contained true -o out/cli
+          Remove-Item out/SandboxLauncher/*.pdb, out/cli/*.pdb -ErrorAction SilentlyContinue
+
+      - name: 上传免安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: SandboxLauncher-win-x64
+          path: out/
+          if-no-files-found: error
